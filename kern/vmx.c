@@ -803,10 +803,24 @@ static u64 construct_eptp(unsigned long root_hpa)
 	u64 eptp;
 
 	/* TODO write the value reading from MSR */
+	/* MT stands for memory type. If bit 7 of the EPT PDPTE is 1, the EPT PDPTE maps a 1-GByte page.
+	 * And in this case, bit 5:3 of the PDPTE entry means the EPT memory type for this 1-GByte page.
+	 * Similarly, If bit 7 of the EPT PDE is 1, the EPT PDE maps a 2-MByte page. 
+	 * And in this case, bit 5:3 of the PDE entry means the EPT memory type for this 2-MByte page. 
+	 * But here, we are talking about eptp, according to Intel SDM:
+	 * "If CR0.CD = 0, the memory type used for any such reference is the EPT paging-structure memory type, 
+	 * which is specified in bits 2:0 of the extended-page-table pointer". A value of 0 indicates the uncacheable type (UC), 
+	 * while a value of 6 indicates the write-back type (WB). And we know that #define VMX_EPT_DEFAULT_MT	0x6ull, 
+	 * which means initially we set the default memory type to write-back type. 
+	 * and then bit 5:3 of the eptp is:"This value is 1 less than the EPT page-walk length", thus in Intel SDM, these three bits are called (EPT PWL-1).
+	 * and given the EPT PWL is typically 4, thus these three bits here are 3, which matches with #define VMX_EPT_DEFAULT_GAW	3. */
 	eptp = VMX_EPT_DEFAULT_MT |
 		VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
+	/* #define VMX_EPT_AD_ENABLE_BIT	(1ull << 6): 
+	 * bit 6 of the EPTP means "Setting this control to 1 enables accessed and dirty flags for EPT" */
 	if (cpu_has_vmx_ept_ad_bits())
 		eptp |= VMX_EPT_AD_ENABLE_BIT;
+	/* bit 12:M-1 stores the 4KB-aligned address of the EPT PML4 table. */
 	eptp |= (root_hpa & PAGE_MASK);
 
 	return eptp;
@@ -1250,6 +1264,9 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vcpu->idt_base = (void *)dt.address;
 
 	spin_lock_init(&vcpu->ept_lock);
+	/* this function only allocates a page,
+	 * set this page to all zeros, and 
+	 * let ept_root stores the starting physical address of this page. */
 	if (vmx_init_ept(vcpu))
 		goto fail_ept;
 	vcpu->eptp = construct_eptp(vcpu->ept_root);

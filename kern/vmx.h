@@ -58,6 +58,7 @@ struct vmx_vcpu {
 
 	struct mmu_notifier mmu_notifier;
 	spinlock_t ept_lock;
+	/* this stores the physical address of the ept table. */
 	unsigned long ept_root;
 	unsigned long eptp;
 	bool ept_ad_enabled;

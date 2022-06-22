@@ -149,8 +149,11 @@ static unsigned long gpa_to_hva(struct vmx_vcpu *vcpu,
 				struct mm_struct *mm,
 				unsigned long gpa)
 {
+	/* boot_cpu_data is a kernel level global variable, 
+	 * it seems that boot_cpu_data.x86_phys_bits gives us the maximum physical address on this computer? */
 	uintptr_t phys_end = (1ULL << boot_cpu_data.x86_phys_bits);
 
+	/* GPA_STACK_SIZE is 1GB, GPA_MAP_SIZE is 63GB. */
 	if (gpa < phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE)
 		return gpa;
 	else if (gpa < phys_end - GPA_STACK_SIZE)
@@ -247,6 +250,7 @@ static void free_ept_page_lock(epte_t epte)
 	put_page(page);
 }
 
+/* this function free the whole table, like the 4-level page tables. */
 static void vmx_free_ept(unsigned long ept_root)
 {
 	epte_t *pgd = (epte_t *) __va(ept_root);
@@ -777,6 +781,7 @@ int vmx_create_ept(struct vmx_vcpu *vcpu)
 	int ret;
 
 	vcpu->mmu_notifier.ops = &ept_mmu_notifier_ops;
+	/* register our mmu notifier so that our callback functions will be called later on. */
 	ret = mmu_notifier_register(&vcpu->mmu_notifier, current->mm);
 	if (ret)
 		goto fail;
